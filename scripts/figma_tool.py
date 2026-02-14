@@ -30,8 +30,19 @@ class FigmaClient:
     def get_team_projects(self, team_id):
         return self._request(f"teams/{team_id}/projects")
 
-    def get_project_files(self, project_id):
-        return self._request(f"projects/{project_id}/files")
+    def get_file(self, file_key):
+        return self._request(f"files/{file_key}")
+
+    def get_comments(self, file_key):
+        return self._request(f"files/{file_key}/comments")
+
+    def get_image(self, file_key, ids, format="png", scale=1.0):
+        params = {
+            "ids": ids,
+            "format": format,
+            "scale": scale
+        }
+        return self._request(f"images/{file_key}", params)
 
 def main():
     parser = argparse.ArgumentParser(description="Figma API Tool")
@@ -82,6 +93,39 @@ def main():
             if not args.id:
                 print("Error: file_key is required.")
                 return
+            if not args.ids:
+                print("Error: --ids is required.")
+                return
+            
+            # 1. Get Image URL
+            images_data = client.get_image(args.id, args.ids, args.format, args.scale)
+            # print(f"DEBUG: {json.dumps(images_data)}") 
+            if "err" in images_data and images_data["err"]:
+                print(f"Error getting image URL: {images_data['err']}")
+                return
+
+            images = images_data.get("images", {})
+            
+            # 2. Download Images
+            for layer_id, image_url in images.items():
+                if not image_url:
+                    print(f"No image URL for layer {layer_id}")
+                    continue
+                
+                print(f"Downloading {layer_id} from {image_url}...")
+                
+                # Sanitize layer_id for filename
+                safe_id = layer_id.replace(":", "_")
+                filename = f"figma_export_{safe_id}.{args.format}"
+                
+                try:
+                    with urllib.request.urlopen(image_url, context=client.context) as response:
+                        with open(filename, "wb") as f:
+                            f.write(response.read())
+                    print(f"Saved to {filename}")
+                except Exception as e:
+                    print(f"Failed to download {image_url}: {e}")
+
     except Exception as e:
         print(f"Error: {str(e)}")
 
